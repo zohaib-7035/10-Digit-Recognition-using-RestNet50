@@ -1,165 +1,117 @@
+# CIFAR-10 Object Recognition using ResNet50
 
-# 🧠 CIFAR-10 Object Recognition using ResNet50
+## Overview
 
-This project is a deep learning pipeline to classify 10 categories of images from the CIFAR-10 dataset using a ResNet50-based model. It also includes a basic dense baseline and steps for deploying the trained model via Streamlit.
+This project implements a deep learning pipeline for object recognition on the CIFAR-10 dataset using a pre-trained ResNet50 backbone. We perform the following steps:
+
+1. **Data Extraction**: Download and extract CIFAR-10 raw data from Kaggle.
+2. **Preprocessing**: Load images, map labels, split into train/test, normalize pixel values.
+3. **Baseline Model**: Train a simple dense neural network for baseline accuracy.
+4. **Transfer Learning**: Upsample 32×32 images to 256×256 and use ResNet50 (ImageNet weights) without top layers, then fine-tune.
+5. **Evaluation**: Plot training curves and report test accuracy.
+6. **Prediction**: Provide utility to load any image and predict its CIFAR-10 class.
 
 ---
 
-## 📦 Dataset
-
-- **Dataset Source:** [CIFAR-10 - Object Recognition in Images (Kaggle)](https://www.kaggle.com/c/cifar-10)
-- **Classes:** airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck
-- **Format:** PNG images + CSV labels
-
----
-
-## 🏗️ Project Structure
+## Repository Structure
 
 ```
-
-📁 cifar10-project/
-├── cifar10\_model.h5         # Trained ResNet50 model
-├── model\_files.zip          # (Optional) zipped export of model + outputs
-├── streamlit\_app.py         # Streamlit app for deployment
-├── train\_notebook.ipynb     # Kaggle or Colab training notebook
-└── README.md                # You're reading it
-
-````
+├── cifar10_resnet50.h5    # Trained Keras model (HDF5 format)
+├── README.md              # Project documentation
+├── notebooks/             # Jupyter/Colab notebooks
+│   └── CIFAR10_ResNet50.ipynb
+└── requirements.txt       # Python dependencies
+```
 
 ---
 
-## 🚀 Model Architectures
+## Requirements
 
-### 🔹 1. Simple Dense Baseline
-- Input: (32, 32, 3)
-- Flatten → Dense(64, ReLU) → Dense(10, Softmax)
+* Python 3.7+
+* TensorFlow 2.x
+* Keras
+* numpy
+* pandas
+* scikit-learn
+* matplotlib
+* Pillow
+* py7zr
 
-### 🔹 2. ResNet50 Transfer Learning
-- Input: (32, 32, 3) → Upsampled to (256, 256, 3)
-- Pretrained ResNet50 base (imagenet weights, `include_top=False`)
-- Custom classifier:
-  - Flatten → BatchNorm → Dense(128, ReLU) → Dropout
-  - BatchNorm → Dense(64, ReLU) → Dropout
-  - BatchNorm → Dense(10, Softmax)
-
----
-
-## 🛠️ Dependencies
+Install dependencies via:
 
 ```bash
-pip install tensorflow keras numpy pandas matplotlib pillow streamlit
-````
-
----
-
-## 🧪 Training
-
-```python
-# Data preprocessing
-X_train_scaled = X_train / 255.0
-X_test_scaled = X_test / 255.0
-
-# Training
-model.fit(X_train_scaled, y_train, validation_split=0.1, epochs=10)
+pip install -r requirements.txt
 ```
 
 ---
 
-## 💾 Saving the Model
+## Usage
 
-```python
-model.save("cifar10_model.h5")
-```
+### On Google Colab
 
-To download in Kaggle:
+1. Upload this notebook to Colab.
+2. Ensure you have a `kaggle.json` in your session or use the Kaggle API to download the CIFAR-10 dataset:
 
-```python
-from IPython.display import FileLink
-FileLink("/kaggle/working/cifar10_model.h5")
-```
+   ```bash
+   !pip install kaggle
+   !mkdir -p ~/.kaggle && cp kaggle.json ~/.kaggle/ && chmod 600 ~/.kaggle/kaggle.json
+   !kaggle competitions download -c cifar-10
+   ```
+3. Run all cells to train and evaluate.
+4. Save and download the model:
+
+   ```python
+   model.save('/content/cifar10_resnet50.h5')
+   from google.colab import files
+   files.download('/content/cifar10_resnet50.h5')
+   ```
+
+### On Kaggle Notebook
+
+1. Create a new Kaggle notebook and enable GPU in Settings.
+2. Add the CIFAR-10 dataset under **Add data** → **Competition** → **CIFAR-10**.
+3. Copy the code cells from the Colab notebook, but remove any `!pip install kaggle` or API credential steps.
+4. Update paths:
+
+   ```python
+   TRAIN_DIR = '/kaggle/input/cifar-10/train'
+   CSV_PATH  = '/kaggle/input/cifar-10/trainLabels.csv'
+   ```
+5. Run all cells.
+6. Under the **Output** pane, download `cifar10_model.h5` once training completes.
 
 ---
 
-## 🧠 Testing with a Single Image
+## Training Details
+
+* **Dense baseline**: Two-layer MLP on flattened 32×32 images, \~50% accuracy.
+* **ResNet50-based**: Upsampled images to 256×256, fine-tuned the pretrained backbone.
+* **Hyperparameters**:
+
+  * Optimizer: RMSprop
+  * Learning rate: 2e-5
+  * Epochs: 10
+  * Batch size: 64
+
+---
+
+## Prediction Utility
+
+To predict a custom image:
 
 ```python
-from tensorflow.keras.models import load_model
-from PIL import Image
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
 import numpy as np
 
-model = load_model("cifar10_model.h5")
-img = Image.open("test_image.png").convert('RGB')
-img = img.resize((256, 256))
-img_array = np.array(img) / 255.0
-img_array = np.expand_dims(img_array, axis=0)
+# Load and preprocess
+img = load_img('path/to/image.png', target_size=(256,256))
+arr = img_to_array(img) / 255.0
+inp = np.expand_dims(arr, 0)
 
-prediction = model.predict(img_array)
-predicted_class = np.argmax(prediction)
+# Predict
+pred = model.predict(inp)
+cls = np.argmax(pred)
+print('Predicted class:', cls)
 ```
 
 ---
-
-## 🌐 Streamlit Deployment
-
-Create a file `streamlit_app.py`:
-
-```python
-import streamlit as st
-from PIL import Image
-import numpy as np
-from tensorflow.keras.models import load_model
-
-model = load_model("cifar10_model.h5")
-
-label_map = {
-    0: 'airplane', 1: 'automobile', 2: 'bird', 3: 'cat', 4: 'deer',
-    5: 'dog', 6: 'frog', 7: 'horse', 8: 'ship', 9: 'truck'
-}
-
-st.title("CIFAR-10 Object Classifier")
-
-uploaded_file = st.file_uploader("Upload a PNG Image", type=["png", "jpg", "jpeg"])
-if uploaded_file:
-    img = Image.open(uploaded_file).convert('RGB')
-    img = img.resize((256, 256))
-    st.image(img, caption='Uploaded Image', use_column_width=True)
-    img_array = np.array(img) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-
-    prediction = model.predict(img_array)
-    predicted_class = label_map[np.argmax(prediction)]
-    st.write(f"### 🎯 Prediction: **{predicted_class}**")
-```
-
-Run it with:
-
-```bash
-streamlit run streamlit_app.py
-```
-
----
-
-## ✅ Results & Accuracy
-
-* Accuracy after 10 epochs: \~75-85% (depending on training parameters and augmentations)
-* Loss: Reduced steadily over training
-
----
-
-## 📌 Notes
-
-* Ensure image shape is `(256, 256, 3)` before prediction.
-* If deploying on Streamlit, upload the `.h5` model and test images.
-* For faster deployment, reduce ResNet layers or switch to MobileNetV2.
-
----
-
-## 🧑‍💻 Author
-
-**Zohaib Shahid**
-Feel free to contribute or fork this repository.
-
-```
-
----
-
